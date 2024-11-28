@@ -36,7 +36,7 @@ pushInfluxData () {
     curl -i -XPOST "$INFLUX_HOST/write?db=$INFLUX_DATABASE&precision=s" -u "$INFLUX_USERNAME:$INFLUX_PASSWORD" --data-binary "$INFLUX_PREFIX,device=$INFLUX_DEVICE $INFLUX_MEASUREMENT_NAME=$2"
 }
 
-INVERTER_DAT=`timeout 10 /opt/inverter-mqtt/inverter_poller -1`
+INVERTER_DAT=`timeout 10 /opt/inverter-cli/bin/inverter_poller -1`
 INVERTER_DATA=`echo $INVERTER_DAT | sed 's/^[^{]*\({.*\)/\1/' | sed -e 's/:/: "/g' -e 's/,/",/g' | sed -e 's/""/"/g'`
 #####################################################################################
 

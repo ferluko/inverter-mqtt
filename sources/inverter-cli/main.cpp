@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <thread>
+#include <sys/file.h>
 
 #include "main.h"
 #include "tools.h"
@@ -15,6 +16,7 @@
 
 #include <pthread.h>
 #include <signal.h>
+#include <string.h>
 
 #include <iostream>
 #include <string>
@@ -25,6 +27,7 @@
 
 bool debugFlag = false;
 bool runOnce = false;
+bool ups_leave = false;
 
 cInverter *ups = NULL;
 
@@ -43,7 +46,10 @@ string devicename;
 int runinterval;
 float ampfactor;
 float wattfactor;
-int qpiri, qpiws, qmod, qpigs;
+int qpiri = 98;
+int qpiws = 36;
+int qmod = 5;
+int qpigs = 110;
 
 // ---------------------------------------
 
@@ -71,7 +77,6 @@ void getSettingsFile(string filename) {
         string fileline, linepart1, linepart2;
         ifstream infile;
         infile.open(filename);
-
         while(!infile.eof()) {
             getline(infile, fileline);
             size_t firstpos = fileline.find("#");
@@ -80,7 +85,6 @@ void getSettingsFile(string filename) {
                 size_t delimiter = fileline.find("=");
                 linepart1 = fileline.substr(0, delimiter);
                 linepart2 = fileline.substr(delimiter+1, string::npos - delimiter);
-
                 if(linepart1 == "device")
                     devicename = linepart2;
                 else if(linepart1 == "run_interval")
@@ -158,6 +162,8 @@ int main(int argc, char* argv[]) {
     // Get command flag settings from the arguments (if any)
     InputParser cmdArgs(argc, argv);
     const string &rawcmd = cmdArgs.getCmdOption("-r");
+    int replylen = 7;
+    sscanf(cmdArgs.getCmdOption("-l").c_str(), "%d", &replylen);
 
     if(cmdArgs.cmdOptionExists("-h") || cmdArgs.cmdOptionExists("--help")) {
         return print_help();
@@ -169,16 +175,20 @@ int main(int argc, char* argv[]) {
         runOnce = true;
     }
     lprintf("INVERTER: Debug set");
+    const char *settings;
 
     // Get the rest of the settings from the conf file
     if( access( "./inverter.conf", F_OK ) != -1 ) { // file exists
-        getSettingsFile("./inverter.conf");
+        settings = "./inverter.conf";
     } else { // file doesn't exist
-        getSettingsFile("/etc/inverter/inverter.conf");
+        settings = "/etc/inverter/inverter.conf";
     }
+    getSettingsFile(settings);
+    int fd = open(settings, O_RDWR);
+    while (flock(fd, LOCK_EX)) sleep(1);
 
     bool ups_status_changed(false);
-    ups = new cInverter(devicename,qpiri,qpiws,qmod,qpigs);
+    ups = new cInverter(devicename);
 
     // Logic to send 'raw commands' to the inverter..
     if (!rawcmd.empty()) {
@@ -215,7 +225,7 @@ int main(int argc, char* argv[]) {
 
                 // Parse and display values
                 sscanf(reply1->c_str(), "%f %f %f %f %d %d %d %d %f %d %d %d %f %f %f %d %s", &voltage_grid, &freq_grid, &voltage_out, &freq_out, &load_va, &load_watt, &load_percent, &voltage_bus, &voltage_batt, &batt_charge_current, &batt_capacity, &temp_heatsink, &pv_input_current, &pv_input_voltage, &scc_voltage, &batt_discharge_current, &device_status);
-                sscanf(reply2->c_str(), "%f %f %f %f %f %d %d %f %f %f %f %f %d %d %d %d %d %d - %d %d %d %f", &grid_voltage_rating, &grid_current_rating, &out_voltage_rating, &out_freq_rating, &out_current_rating, &out_va_rating, &out_watt_rating, &batt_rating, &batt_recharge_voltage, &batt_under_voltage, &batt_bulk_voltage, &batt_float_voltage, &batt_type, &max_grid_charge_current, &max_charge_current, &in_voltage_range, &out_source_priority, &charger_source_priority, &machine_type, &topology, &out_mode, &batt_redischarge_voltage);
+                sscanf(reply2->c_str(), "%f %f %f %f %f %d %d %f %f %f %f %f %d %d %d %d %d %d %d %d %d %f", &grid_voltage_rating, &grid_current_rating, &out_voltage_rating, &out_freq_rating, &out_current_rating, &out_va_rating, &out_watt_rating, &batt_rating, &batt_recharge_voltage, &batt_under_voltage, &batt_bulk_voltage, &batt_float_voltage, &batt_type, &max_grid_charge_current, &max_charge_current, &in_voltage_range, &out_source_priority, &charger_source_priority, &machine_type, &topology, &out_mode, &batt_redischarge_voltage);
 
                 // There appears to be a discrepancy in actual DMM measured current vs what the meter is
                 // telling me it's getting, so lets add a variable we can multiply/divide by to adjust if
@@ -278,19 +288,20 @@ int main(int argc, char* argv[]) {
                 // Delete reply string so we can update with new data when polled again...
                 delete reply1;
                 delete reply2;
-
-                if(runOnce) {
-                    // Do once and exit instead of loop endlessly
-                    lprintf("INVERTER: All queries complete, exiting loop.");
-                    exit(0);
-                }
             }
+        } else if (ups_leave) {
+            ups->terminateThread();
+            // Do once and exit instead of loop endlessly
+            lprintf("INVERTER: All queries complete, exiting loop.");
+            exit(0);
         }
 
         sleep(1);
     }
 
-    if (ups)
+    if (ups) {
+        ups->terminateThread();
         delete ups;
+    }
     return 0;
 }
