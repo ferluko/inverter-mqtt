@@ -21,6 +21,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <sstream>
 #include <algorithm>
 #include <fstream>
 
@@ -154,6 +155,7 @@ int main(int argc, char* argv[]) {
     int in_voltage_range;
     int out_source_priority;
     int charger_source_priority;
+    int parallel_max;
     int machine_type;
     int topology;
     int out_mode;
@@ -223,10 +225,11 @@ int main(int argc, char* argv[]) {
 
             if (reply1 && reply2 && warnings) {
 
-                // Parse and display values
+                //remove unwanted characters
+                std::replace(reply2->begin(), reply2->end(), '-', '0'); // Replace `-` with `0`
+                // Parse and display values (230.0 08.7 230.0 50.0 08.7 2000 2000 24.0 23.5 21.0 28.4 27.0 2 20 40 0 2 3 - 01 1 0 25.5 0 0
                 sscanf(reply1->c_str(), "%f %f %f %f %d %d %d %d %f %d %d %d %f %f %f %d %s", &voltage_grid, &freq_grid, &voltage_out, &freq_out, &load_va, &load_watt, &load_percent, &voltage_bus, &voltage_batt, &batt_charge_current, &batt_capacity, &temp_heatsink, &pv_input_current, &pv_input_voltage, &scc_voltage, &batt_discharge_current, &device_status);
-                sscanf(reply2->c_str(), "%f %f %f %f %f %d %d %f %f %f %f %f %d %d %d %d %d %d %d %d %d %f", &grid_voltage_rating, &grid_current_rating, &out_voltage_rating, &out_freq_rating, &out_current_rating, &out_va_rating, &out_watt_rating, &batt_rating, &batt_recharge_voltage, &batt_under_voltage, &batt_bulk_voltage, &batt_float_voltage, &batt_type, &max_grid_charge_current, &max_charge_current, &in_voltage_range, &out_source_priority, &charger_source_priority, &machine_type, &topology, &out_mode, &batt_redischarge_voltage);
-
+                sscanf(reply2->c_str(), "%f %f %f %f %f %d %d %f %f %f %f %f %d %d %d %d %d %d %d %d %d %d %f", &grid_voltage_rating, &grid_current_rating, &out_voltage_rating, &out_freq_rating, &out_current_rating, &out_va_rating, &out_watt_rating, &batt_rating, &batt_recharge_voltage, &batt_under_voltage, &batt_bulk_voltage, &batt_float_voltage, &batt_type, &max_grid_charge_current, &max_charge_current, &in_voltage_range, &out_source_priority, &charger_source_priority, &parallel_max, &machine_type, &topology, &out_mode, &batt_redischarge_voltage);
                 // There appears to be a discrepancy in actual DMM measured current vs what the meter is
                 // telling me it's getting, so lets add a variable we can multiply/divide by to adjust if
                 // needed.  This should be set in the config so it can be changed without program recompile.
